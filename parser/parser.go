@@ -72,12 +72,15 @@ var jumps = map[string]string{
 }
 
 func (sym *SymbolTable) Add(key string, value ...uint16) {
-	if len(value) == 0 {
-		value[0] = nextSymbol
+	address := nextSymbol
+
+	if len(value) > 0 {
+		address = value[0]
+	} else {
 		nextSymbol++
 	}
 
-	sym.symbols[key] = value[0]
+	sym.symbols[key] = address
 }
 
 func (sym *SymbolTable) Contains(key string) bool {
@@ -85,12 +88,8 @@ func (sym *SymbolTable) Contains(key string) bool {
 	return ok
 }
 
-func (sym *SymbolTable) Get(key string) (uint16, error) {
-	if !sym.Contains(key) {
-		return 0, fmt.Errorf("symbol %s not found", key)
-	}
-
-	return sym.symbols[key], nil
+func (sym *SymbolTable) Get(key string) uint16 {
+	return sym.symbols[key]
 }
 
 func initSymbols() map[string]uint16 {
@@ -124,8 +123,9 @@ func NewParser() *Parser {
 	return p
 }
 
-func (p *Parser) Parse(scanner *bufio.Scanner) map[string]string {
-	instructions := map[string]string{}
+func (p *Parser) Parse(scanner *bufio.Scanner) []string {
+	lineCount := 0
+	instructions := [][]string{}
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -135,19 +135,45 @@ func (p *Parser) Parse(scanner *bufio.Scanner) map[string]string {
 			continue
 		}
 
+		if strings.HasPrefix(line, "(") {
+			label := strings.Trim(line, "()")
+			if (!p.symbolTable.Contains(label)) {
+				p.symbolTable.Add(label, uint16(lineCount)) // Need to actually point this to the right line
+			}
+
+			continue
+		}
+
+		lineCount++
+
 		instruction := translateInstruction(line)
 
-		instructions[line] = instruction
+		instructions = append(instructions, []string{line, instruction})
 	}
 
-	return instructions
+	for i, instruction := range instructions {
+		if strings.HasPrefix(instruction[0], "@") && instruction[1] == "" {
+			unresolvedSymbol := strings.TrimPrefix(instruction[0], "@")
+
+			if (!p.symbolTable.Contains(unresolvedSymbol)) {
+				p.symbolTable.Add(unresolvedSymbol);
+			}
+
+			instructions[i][1] = translateAInstruction(instruction[0])
+		}
+	}
+
+	binaryInstructions := make([]string, len(instructions))
+	for i := range instructions {
+		binaryInstructions[i] = instructions[i][1]
+	}
+
+	return binaryInstructions
 }
 
 func translateInstruction(instruction string) string {
-	fmt.Println(instruction)
-	if strings.HasPrefix(instruction, "(") {
-		return "" // It's a label, we'll handle it later
-	}
+	instruction = strings.Split(instruction, "//")[0]
+	instruction = strings.TrimSpace(instruction)
 
 	if strings.HasPrefix(instruction, "@") {
 		return translateAInstruction(instruction)
@@ -164,7 +190,11 @@ func translateAInstruction(instruction string) string {
 	if err == nil {
 		location = uint16(parseduint)
 	} else {
-		return "" // It's a symbol, we'll handle it later
+		if p.symbolTable.Contains(address) {
+			location = p.symbolTable.Get(address)
+		} else {
+			return "" // It's an undefined symbol, we'll handle it later
+		}
 	}
 
 	binary := fmt.Sprintf("%016b", location)
@@ -174,7 +204,9 @@ func translateAInstruction(instruction string) string {
 
 func translateCInstruction(instruction string) string {
 	var dest, jump string
-	var destBin, compBin, jumpBin string
+	destBin := "000"
+	jumpBin := "000"
+	var compBin string
 	var ok bool
 
 	if strings.Contains(instruction, "=") {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 
 	"liggis-hack-assembler/Parser"
@@ -26,5 +25,14 @@ func main() {
 
 	output := parser.Parse(scanner)
 
-	fmt.Println(output)
+	// Format output to be single string, separated by newlines
+	outputString := ""
+	for _, line := range output {
+		outputString += line + "\n"
+	}
+
+	// Save to file
+	outputFilename := fileName[:len(fileName)-3] + "hack"
+	outputFile, _ := os.Create(outputFilename)
+	outputFile.WriteString(outputString)
 }
