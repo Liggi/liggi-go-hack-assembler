@@ -207,13 +207,13 @@ func (p *Parser) translateInstruction(instruction string) (uint16, error) {
 	instruction = strings.TrimSpace(instruction)
 
 	if strings.HasPrefix(instruction, "@") {
-		return p.translateAInstruction(instruction)
+		return p.translateAInstruction(instruction), nil
 	} else {
 		return p.translateCInstruction(instruction)
 	}
 }
 
-func (p *Parser) translateAInstruction(instruction string) (uint16, error) {
+func (p *Parser) translateAInstruction(instruction string) uint16 {
 	var location uint16
 	address := strings.TrimPrefix(instruction, "@")
 
@@ -228,7 +228,7 @@ func (p *Parser) translateAInstruction(instruction string) (uint16, error) {
 		location = p.symbolTable.Get(address)
 	}
 
-	return location, nil
+	return location
 }
 
 func (p *Parser) translateCInstruction(instruction string) (uint16, error) {
